@@ -14,6 +14,9 @@ $LOAD_PATH.unshift File.dirname(__FILE__) + '/../'
 $LOAD_PATH.unshift File.dirname(__FILE__) + '/lib'
 
 require 'thinking_sphinx'
+ 
+desc "Default Task"
+task :default => [ :spec ]
 
 desc 'Generate documentation'
 Rake::RDocTask.new(:rdoc) do |rdoc|
