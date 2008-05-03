@@ -202,6 +202,7 @@ index #{model.name.downcase}
   type = distributed
   local = #{model.name.downcase}_core
   local = #{model.name.downcase}_delta
+  charset_type = #{self.charset_type}
 }
             INDEX
           else
