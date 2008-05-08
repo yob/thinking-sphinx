@@ -21,8 +21,9 @@ module ThinkingSphinx
     Major = 0
     Minor = 9
     Tiny  = 5
+    Custom  = 1
     
-    String = [Major, Minor, Tiny].join('.')
+    String = [Major, Minor, Tiny, Custom].join('.')
   end
   
   # A ConnectionError will get thrown when a connection to Sphinx can't be
