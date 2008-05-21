@@ -53,7 +53,7 @@ module ThinkingSphinx
       self.searchd_log_file  = "#{app_root}/log/searchd.log"
       self.query_log_file    = "#{app_root}/log/searchd.query.log"
       self.pid_file          = "#{app_root}/log/searchd.#{environment}.pid"
-      self.searchd_file_path = "#{app_root}/db/sphinx/#{environment}/"
+      self.searchd_file_path = "#{app_root}/db/sphinx/#{environment}"
       self.port              = 3312
       self.allow_star        = false
       self.mem_limit         = "64M"
@@ -121,10 +121,11 @@ searchd
               attrib.to_sphinx_clause
             }.join("\n  ")
             
-            adapter = case database_conf[:adapter]
-            when "postgresql"
+            adapter = case index.adapter
+            when :postgres
+              create_array_accum
               "pgsql"
-            when "mysql"
+            when :mysql
               "mysql"
             else
               raise "Unsupported Database Adapter: Sphinx only supports MySQL and PosgreSQL"
@@ -134,7 +135,7 @@ searchd
 
 source #{model.name.downcase}_#{i}_core
 {
-  type = #{adapter}
+  type     = #{adapter}
   sql_host = #{database_conf[:host] || "localhost"}
   sql_user = #{database_conf[:username]}
   sql_pass = #{database_conf[:password]}
@@ -170,23 +171,16 @@ source #{model.name.downcase}_#{i}_delta : #{model.name.downcase}_#{i}_core
 index #{model.name.downcase}_core
 {
   #{source_list}
-  morphology = #{self.morphology}
   path = #{self.searchd_file_path}/#{model.name.downcase}_core
   charset_type = #{self.charset_type}
   INDEX
-          unless self.charset_table.nil?
-            file.puts "charset_table  = #{self.charset_table}"
-          end
-          
-          unless self.ignore_chars.nil?
-            file.puts "ignore_chars   = #{self.ignore_chars}"
-          end
+          file.puts "  morphology = #{self.morphology}"        unless self.morphology.blank?
+          file.puts "  charset_table  = #{self.charset_table}" unless self.charset_table.nil?
+          file.puts "  ignore_chars   = #{self.ignore_chars}"  unless self.ignore_chars.nil?
           
           if self.allow_star
-            file.write <<-INDEX
-  enable_star    = 1
-  min_prefix_len = 1
-            INDEX
+            file.puts "  enable_star    = 1"
+            file.puts "  min_prefix_len = 1"
           end
           
           file.write("}\n")
@@ -236,7 +230,7 @@ index #{model.name.downcase}
         
         begin
           model_name.camelize.constantize
-        rescue NameError
+        rescue NameError, LoadError
           next
         end
       end
@@ -256,6 +250,26 @@ index #{model.name.downcase}
       conf.each do |key,value|
         self.send("#{key}=", value) if self.methods.include?("#{key}=")
       end unless conf.nil?
+    end
+    
+    def create_array_accum
+      execute "begin"
+      execute "savepoint ts"
+      begin
+        execute <<-SQL
+          CREATE AGGREGATE array_accum (anyelement)
+          (
+              sfunc = array_append,
+              stype = anyarray,
+              initcond = '{}'
+          );
+        SQL
+      rescue
+        raise unless $!.to_s =~ /already exists with same argument types/
+        execute "rollback to savepoint ts"
+      end
+      execute "release savepoint foo"
+      execute "commit"
     end
   end
 end
