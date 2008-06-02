@@ -57,6 +57,8 @@ module ThinkingSphinx
       @columns      = Array(columns)
       @associations = {}
       
+      raise "Cannot define a field with no columns. Maybe you are trying to index a field with a reserved name (id, name). You can fix this error by using a symbol rather than a bare name (:id instead of id)." if @columns.empty? || @columns.any? { |column| !column.respond_to?(:__stack) }
+      
       @alias        = options[:as]
       @type         = options[:type]
     end
@@ -139,7 +141,7 @@ module ThinkingSphinx
       when "ActiveRecord::ConnectionAdapters::MysqlAdapter"
         "CONCAT_WS('#{separator}', #{clause})"
       when "ActiveRecord::ConnectionAdapters::PostgreSQLAdapter"
-        clause.split(', ').join(" || #{separator} || ")
+        clause.split(', ').join(" || '#{separator}' || ")
       else
         clause
       end
@@ -271,7 +273,8 @@ module ThinkingSphinx
         klasses = @associations[col].empty? ? [@model] :
           @associations[col].collect { |assoc| assoc.reflection.klass }
         klasses.all? { |klass|
-          klass.columns.detect { |column| column.name == col.__name.to_s }.type == :integer
+          column = klass.columns.detect { |column| column.name == col.__name.to_s }
+          !column.nil? && column.type == :integer
         }
       }
     end

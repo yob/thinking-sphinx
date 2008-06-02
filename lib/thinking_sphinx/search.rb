@@ -15,9 +15,12 @@ module ThinkingSphinx
       def search_for_ids(*args)
         results, client = search_results(*args.clone)
         
+        options = args.extract_options!
+        page    = options[:page] ? options[:page].to_i : 1
+        
         begin
           pager = WillPaginate::Collection.new(page,
-            client.limit, results[:total])
+            client.limit, results[:total] || 0)
           pager.replace results[:matches].collect { |match| match[:doc] }
         rescue
           results[:matches].collect { |match| match[:doc] }
@@ -268,6 +271,9 @@ module ThinkingSphinx
         
         client.anchor = anchor_conditions(klass, options) || {} if client.anchor.empty?
         
+        client.filters << Riddle::Client::Filter.new(
+          "sphinx_deleted", [0]
+        )
         # class filters
         client.filters << Riddle::Client::Filter.new(
           "class_crc", options[:classes].collect { |klass| klass.to_crc32 }
