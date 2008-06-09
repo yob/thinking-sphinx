@@ -1,6 +1,44 @@
 require 'spec/spec_helper'
 
 describe ThinkingSphinx::Configuration do
+  describe "environment class method" do
+    before :each do
+      ThinkingSphinx::Configuration.send(:class_variable_set, :@@environment, nil)
+      
+      ENV["RAILS_ENV"]  = nil
+      ENV["MERB_ENV"]   = nil
+    end
+    
+    it "should use the Merb environment value if set" do
+      unless defined?(Merb)
+        module Merb; end
+      end
+      
+      ThinkingSphinx::Configuration.stub_method(:defined? => true)
+      ENV["MERB_ENV"] = "merb_production"
+      ThinkingSphinx::Configuration.environment.should == "merb_production"
+      
+      Object.send(:remove_const, :Merb)
+    end
+    
+    it "should use the Rails environment value if set" do
+      ENV["RAILS_ENV"] = "rails_production"
+      ThinkingSphinx::Configuration.environment.should == "rails_production"
+    end
+    
+    it "should default to development" do
+      ThinkingSphinx::Configuration.environment.should == "development"
+    end
+  end
+  
+  describe "environment instance method" do
+    it "should return the class method" do
+      ThinkingSphinx::Configuration.stub_method(:environment => "spec")
+      ThinkingSphinx::Configuration.new.environment.should == "spec"
+      ThinkingSphinx::Configuration.should have_received(:environment)
+    end
+  end
+  
   describe "build method" do
     before :each do
       @config = ThinkingSphinx::Configuration.new
@@ -158,6 +196,46 @@ describe ThinkingSphinx::Configuration do
     end
   end
   
+  describe "load_models method" do
+    it "should have some specs"
+  end
+  
+  describe "parse_config method" do
+    before :each do
+      @settings = {
+        "development" => {
+          "config_file"       => "my_conf_file.conf",
+          "searchd_log_file"  => "searchd_log_file.log",
+          "query_log_file"    => "query_log_file.log",
+          "pid_file"          => "pid_file.pid",
+          "searchd_file_path" => "searchd/file/path",
+          "address"           => "127.0.0.1",
+          "port"              => 3333,
+          "allow_star"        => true,
+          "min_prefix_len"    => 2,
+          "min_infix_len"     => 3,
+          "mem_limit"         => "128M",
+          "max_matches"       => 1001,
+          "morphology"        => "stem_ru",
+          "charset_type"      => "latin1",
+          "charset_table"     => "table",
+          "ignore_chars"      => "e"
+        }
+      }
+      # puts YAML.dump(settings)
+      open("#{RAILS_ROOT}/config/sphinx.yml", "w") do |f|
+        f.write  YAML.dump(@settings)
+      end
+    end
+    
+    it "should use the accessors to set the configuration values" do
+      config = ThinkingSphinx::Configuration.new
+      @settings["development"].each do |key, value|
+        config.send(key).should == value
+      end
+    end
+  end
+  
   describe "core_index_for_model method" do
     before :each do
       @config = ThinkingSphinx::Configuration.new
@@ -243,6 +321,16 @@ describe ThinkingSphinx::Configuration do
       text.should match(/min_infix_len\s+= 1/)
     end
     
+    it "should use the configuration's infix and prefix length values if set" do
+      @config.allow_star     = true
+      @config.min_prefix_len = 3
+      @config.min_infix_len  = 2
+      text =  @config.send(:core_index_for_model, @model, "my sources")
+      
+      text.should match(/min_prefix_len\s+= 3/)
+      text.should match(/min_infix_len\s+= 2/)
+    end
+    
     it "should not include the star-related settings when allow_star is false" do
       @config.allow_star = false
       text =  @config.send(:core_index_for_model, @model, "my sources")
@@ -255,7 +343,8 @@ describe ThinkingSphinx::Configuration do
     it "should set prefix_fields if any fields are flagged explicitly" do
       @index = ThinkingSphinx::Index.stub_instance(
         :prefix_fields => ["a", "b", "c"],
-        :infix_fields  => ["d", "e", "f"]
+        :infix_fields  => ["d", "e", "f"],
+        :options       => {}
       )
       @model.stub_method(:indexes => [@index])
       
@@ -273,7 +362,8 @@ describe ThinkingSphinx::Configuration do
     it "should set infix_fields if any fields are flagged explicitly" do
       @index = ThinkingSphinx::Index.stub_instance(
         :prefix_fields => ["a", "b", "c"],
-        :infix_fields  => ["d", "e", "f"]
+        :infix_fields  => ["d", "e", "f"],
+        :options       => {}
       )
       @model.stub_method(:indexes => [@index])
       
@@ -354,5 +444,9 @@ describe ThinkingSphinx::Configuration do
         /local = specmodel_delta/
       )
     end
+  end
+  
+  describe "create_array_accum method" do
+    it "should create the array_accum method on PostgreSQL"
   end
 end

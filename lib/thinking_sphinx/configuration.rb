@@ -12,6 +12,8 @@ module ThinkingSphinx
   # address::          0.0.0.0 (all)
   # port::             3312
   # allow star::       false
+  # min prefix len::   1
+  # min infix len::    1
   # mem limit::        64M
   # max matches::      1000
   # morphology::       stem_en
@@ -23,8 +25,9 @@ module ThinkingSphinx
   # config/sphinx.yml with settings for each environment, in a similar
   # fashion to database.yml - using the following keys: config_file,
   # searchd_log_file, query_log_file, pid_file, searchd_file_path, port,
-  # allow_star, mem_limit, max_matches, morphology, charset_type,
-  # charset_table, ignore_chars. I think you've got the idea.
+  # allow_star, min_prefix_len, min_infix_len, mem_limit, max_matches,
+  # morphology, charset_type, charset_table, ignore_chars. I think you've got
+  # the idea.
   # 
   # Each setting in the YAML file is optional - so only put in the ones you
   # want to change.
@@ -35,9 +38,9 @@ module ThinkingSphinx
   # 
   class Configuration
     attr_accessor :config_file, :searchd_log_file, :query_log_file,
-      :pid_file, :searchd_file_path, :address, :port, :allow_star, :mem_limit,
-      :max_matches, :morphology, :charset_type, :charset_table, :ignore_chars,
-      :app_root
+      :pid_file, :searchd_file_path, :address, :port, :allow_star,
+      :min_prefix_len, :min_infix_len, :mem_limit, :max_matches, :morphology,
+      :charset_type, :charset_table, :ignore_chars, :app_root
     
     attr_reader :environment
     
@@ -57,6 +60,8 @@ module ThinkingSphinx
       self.address           = "0.0.0.0"
       self.port              = 3312
       self.allow_star        = false
+      self.min_prefix_len    = 1
+      self.min_infix_len     = 1
       self.mem_limit         = "64M"
       self.max_matches       = 1000
       self.morphology        = "stem_en"
@@ -187,14 +192,17 @@ path = #{self.searchd_file_path}/#{model.name.downcase}_core
 charset_type = #{self.charset_type}
 INDEX
       
-      output += "  morphology     = #{self.morphology}\n"    unless self.morphology.blank?
+      morphology  = model.indexes.inject(self.morphology) { |morph, index|
+        index.options[:morphology] || morph
+      }
+      output += "  morphology     = #{morphology}\n"         unless morphology.blank?
       output += "  charset_table  = #{self.charset_table}\n" unless self.charset_table.nil?
       output += "  ignore_chars   = #{self.ignore_chars}\n"  unless self.ignore_chars.nil?
       
       if self.allow_star
         output += "  enable_star    = 1\n"
-        output += "  min_prefix_len = 1\n"
-        output += "  min_infix_len  = 1\n"
+        output += "  min_prefix_len = #{self.min_prefix_len}\n"
+        output += "  min_infix_len  = #{self.min_infix_len}\n"
       end
       
       unless model.indexes.collect(&:prefix_fields).flatten.empty?
