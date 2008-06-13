@@ -210,7 +210,6 @@ INDEX
       if self.allow_star
         output += "  enable_star    = 1\n"
         output += "  min_prefix_len = #{self.min_prefix_len}\n"
-        output += "  min_infix_len  = #{self.min_infix_len}\n"
       end
       
       output += "  html_strip     = 1\n" if self.html_strip
