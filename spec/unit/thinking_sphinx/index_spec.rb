@@ -170,6 +170,22 @@ describe ThinkingSphinx::Index do
     end
   end
   
+  describe "to_sql_query_range method" do
+    before :each do
+      @index = ThinkingSphinx::Index.new(Person)
+    end
+    
+    it "should add COALESCE around MIN and MAX calls if using PostgreSQL" do
+      @index.stub_method(:adapter => :postgres)
+      
+      @index.to_sql_query_range.should match(/COALESCE\(MIN.+COALESCE\(MAX/)
+    end
+    
+    it "shouldn't add COALESCE if using MySQL" do
+      @index.to_sql_query_range.should_not match(/COALESCE/)
+    end
+  end
+  
   describe "prefix_fields method" do
     before :each do
       @index = ThinkingSphinx::Index.new(Person)
