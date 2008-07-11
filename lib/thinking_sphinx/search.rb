@@ -20,7 +20,7 @@ module ThinkingSphinx
         
         begin
           pager = WillPaginate::Collection.new(page,
-            client.limit, results[:total] || 0)
+            client.limit, results[:total_found] || 0)
           pager.replace results[:matches].collect { |match| match[:doc] }
         rescue
           results[:matches].collect { |match| match[:doc] }
@@ -175,7 +175,7 @@ module ThinkingSphinx
         
         begin
           pager = WillPaginate::Collection.new(page,
-            client.limit, results[:total] || 0)
+            client.limit, results[:total_found] || 0)
           pager.replace instances_from_results(results[:matches], options, klass)
         rescue StandardError => err
           instances_from_results(results[:matches], options, klass)
@@ -421,7 +421,7 @@ module ThinkingSphinx
         
         case order = options[:order]
         when Symbol
-          client.sort_mode ||= :attr_asc
+          client.sort_mode = :attr_asc if client.sort_mode == :relevance || client.sort_mode.nil?
           if fields.include?(order)
             client.sort_by = order.to_s.concat("_sort")
           else
