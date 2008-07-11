@@ -61,6 +61,20 @@ module ThinkingSphinx
       # match mode explicitly (but then this way of searching won't work). Also
       # note that you don't need to put in a search string.
       #
+      # == Advanced Searching
+      #
+      # When specifying search conditions as a hash, there is an implicit AND
+      # between all the search terms. However, Sphinx supports a highly expressive
+      # query syntax in extended match mode, and there may be situations where
+      # you will require some extra flexibility in your searches.
+      #
+      # To specify a custom query string, specify :conditions with a string.
+      #
+      #   User.search :conditions => "@name pat | @username pat"
+      #
+      # See the sphinx documentation for full details on the query syntax for 
+      # extended match mode.
+      #
       # == Searching by Attributes
       #
       # Also known as filters, you can limit your searches to documents that
@@ -347,17 +361,21 @@ module ThinkingSphinx
           index.attributes.collect { |attrib| attrib.unique_name }
         }.flatten : []
         
-        search_string = ""
         filters       = []
         
-        conditions.each do |key,val|
-          if attributes.include?(key.to_sym)
-            filters << Riddle::Client::Filter.new(
-              key.to_s,
-              val.is_a?(Range) ? val : Array(val)
-            )
-          else
-            search_string << "@#{key} #{val} "
+        if conditions.kind_of?(String)
+          search_string = conditions
+        else
+          search_string = ""
+          conditions.each do |key,val|
+            if attributes.include?(key.to_sym)
+              filters << Riddle::Client::Filter.new(
+                key.to_s,
+                val.is_a?(Range) ? val : Array(val)
+              )
+            else
+              search_string << "@#{key} #{val} "
+            end
           end
         end
         
