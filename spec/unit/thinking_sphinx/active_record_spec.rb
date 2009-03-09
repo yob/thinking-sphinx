@@ -21,7 +21,7 @@ describe "ThinkingSphinx::ActiveRecord" do
       # Remove the class so we can redefine it
       TestModule.send(:remove_const, :TestModel)
       
-      ThinkingSphinx::Index.unstub_method(:new)
+      ThinkingSphinx.indexed_models.delete "TestModule::TestModel"
     end
     
     it "should return nil and do nothing if indexes are disabled" do
@@ -36,7 +36,7 @@ describe "ThinkingSphinx::ActiveRecord" do
     it "should add a new index to the model" do
       TestModule::TestModel.define_index do; end
       
-      TestModule::TestModel.indexes.length.should == 1
+      TestModule::TestModel.sphinx_indexes.length.should == 1
     end
     
     it "should add to ThinkingSphinx.indexed_models if the model doesn't already exist in the array" do
@@ -99,37 +99,23 @@ describe "ThinkingSphinx::ActiveRecord" do
       Person.to_crc32.should be_a_kind_of(Integer)
     end
   end
-  
-  describe "in_core_index? method" do
-    it "should return the model's corresponding search_for_id value" do
-      Person.stub_method(:search_for_id => :searching_for_id)
-      
-      person = Person.find(:first)
-      person.in_core_index?.should == :searching_for_id
-      Person.should have_received(:search_for_id).with(person.id, "person_core")
-    end
-  end
-  
+    
   describe "toggle_deleted method" do
     before :each do
-      @configuration = ThinkingSphinx::Configuration.stub_instance(
+      ThinkingSphinx.stub_method(:sphinx_running? => true)
+      
+      @configuration = ThinkingSphinx::Configuration.instance
+      @configuration.stub_methods(
         :address  => "an address",
         :port     => 123
       )
       @client = Riddle::Client.stub_instance(:update => true)
-      @person = Person.new
+      @person = Person.find(:first)
       
-      ThinkingSphinx::Configuration.stub_method(:new => @configuration)
       Riddle::Client.stub_method(:new => @client)
-      Person.indexes.each { |index| index.stub_method(:delta? => false) }
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => false) }
       @person.stub_method(:in_core_index? => true)
     end
-    
-    # after :each do
-    #   ThinkingSphinx::Configuration.unstub_method(:new)
-    #   Riddle::Client.unstub_method(:new)
-    #   Person.indexes.each { |index| index.unstub_method(:delta?) }
-    # end
     
     it "should create a client using the Configuration's address and port" do
       @person.toggle_deleted
@@ -143,7 +129,7 @@ describe "ThinkingSphinx::ActiveRecord" do
       @person.toggle_deleted
       
       @client.should have_received(:update).with(
-        "person_core", ["sphinx_deleted"], {@person.id => 1}
+        "person_core", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
     
@@ -153,58 +139,118 @@ describe "ThinkingSphinx::ActiveRecord" do
       @person.toggle_deleted
       
       @client.should_not have_received(:update).with(
-        "person_core", ["sphinx_deleted"], {@person.id => 1}
+        "person_core", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
     
-    it "should update the delta index's deleted flag if delta indexing is enabled and the instance's delta is true" do
-      Person.indexes.each { |index| index.stub_method(:delta? => true) }
+    it "shouldn't attempt to update the deleted flag if sphinx isn't running" do
+      ThinkingSphinx.stub_method(:sphinx_running? => false)
+      
+      @person.toggle_deleted
+      
+      @person.should_not have_received(:in_core_index?)
+      @client.should_not have_received(:update)
+    end
+    
+    it "should update the delta index's deleted flag if delta indexes are enabled and the instance's delta is true" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = true
       
       @person.toggle_deleted
       
       @client.should have_received(:update).with(
-        "person_delta", ["sphinx_deleted"], {@person.id => 1}
+        "person_delta", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
     
-    it "should not update the delta index's deleted flag if delta indexing is enabled and the instance's delta is false" do
-      Person.indexes.each { |index| index.stub_method(:delta? => true) }
+    it "should not update the delta index's deleted flag if delta indexes are enabled and the instance's delta is false" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = false
       
       @person.toggle_deleted
       
       @client.should_not have_received(:update).with(
-        "person_delta", ["sphinx_deleted"], {@person.id => 1}
+        "person_delta", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
     
-    it "should not update the delta index's deleted flag if delta indexing is enabled and the instance's delta is equivalent to false" do
-      Person.indexes.each { |index| index.stub_method(:delta? => true) }
+    it "should not update the delta index's deleted flag if delta indexes are enabled and the instance's delta is equivalent to false" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = 0
 
       @person.toggle_deleted
 
       @client.should_not have_received(:update).with(
-        "person_delta", ["sphinx_deleted"], {@person.id => 1}
+        "person_delta", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
 
-    it "shouldn't update the delta index if delta indexing is disabled" do
+    it "shouldn't update the delta index if delta indexes are disabled" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
       @person.toggle_deleted
       
       @client.should_not have_received(:update).with(
-        "person_delta", ["sphinx_deleted"], {@person.id => 1}
+        "person_delta", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
       )
     end
+    
+    it "should not update the delta index if delta indexing is disabled" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => false)
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => true) }
+      @person.delta = true
+      
+      @person.toggle_deleted
+      
+      @client.should_not have_received(:update).with(
+        "person_delta", ["sphinx_deleted"], {@person.sphinx_document_id => 1}
+      )
+    end
+    
+    it "should not update either index if updates are disabled" do
+      ThinkingSphinx.stub_methods(
+        :updates_enabled? => false,
+        :deltas_enabled   => true
+      )
+      Person.sphinx_indexes.each { |index| index.stub_method(:delta? => true) }
+      @person.delta = true
+      
+      @person.toggle_deleted
+      
+      @client.should_not have_received(:update)
+    end
   end
 
-  describe "indexes in the inheritance chain (STI)" do
-
+  describe "sphinx_indexes in the inheritance chain (STI)" do
     it "should hand defined indexes on a class down to its child classes" do
-      Child.indexes.should == Person.indexes
+      Child.sphinx_indexes.should include(*Person.sphinx_indexes)
     end
 
+    it "should allow associations to other STI models" do
+      Child.sphinx_indexes.last.link!
+      sql = Child.sphinx_indexes.last.to_riddle_for_core(0, 0).sql_query
+      sql.gsub!('$start', '0').gsub!('$end', '100')
+      lambda { Child.connection.execute(sql) }.should_not raise_error(ActiveRecord::StatementInvalid)
+    end
   end
-
+  
+  it "should return the sphinx document id as expected" do
+    person      = Person.find(:first)
+    model_count = ThinkingSphinx.indexed_models.length
+    offset      = ThinkingSphinx.indexed_models.index("Person")
+    
+    (person.id * model_count + offset).should == person.sphinx_document_id
+    
+    alpha       = Alpha.find(:first)
+    offset      = ThinkingSphinx.indexed_models.index("Alpha")
+    
+    (alpha.id * model_count + offset).should == alpha.sphinx_document_id
+    
+    beta        = Beta.find(:first)
+    offset      = ThinkingSphinx.indexed_models.index("Beta")
+    
+    (beta.id * model_count + offset).should == beta.sphinx_document_id
+  end
 end

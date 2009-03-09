@@ -1,10 +1,6 @@
-begin
-  require 'spec'
-rescue LoadError
-  require 'rubygems'
-  require 'spec'
-end
+require 'rubygems'
 
+<<<<<<< HEAD:Rakefile
 require 'rake/rdoctask'
 require 'spec/rake/spectask'
 require 'rake/gempackagetask'
@@ -67,3 +63,7 @@ Rake::GemPackageTask.new(spec) do |p|
   p.need_tar = true
   p.need_zip = true
 end
+=======
+require 'tasks/distribution'
+require 'tasks/testing'
+>>>>>>> pat/master:Rakefile

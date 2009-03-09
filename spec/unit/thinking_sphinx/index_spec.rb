@@ -1,188 +1,12 @@
 require 'spec/spec_helper'
 
 describe ThinkingSphinx::Index do
-  describe "to_config method" do
-    before :each do
+  describe "generated sql_query" do
+    it "should include explicit groupings if requested" do
       @index = ThinkingSphinx::Index.new(Person)
       
-      @index.stub_methods(
-        :attributes => [
-          ThinkingSphinx::Attribute.stub_instance(:to_sphinx_clause => "attr a"),
-          ThinkingSphinx::Attribute.stub_instance(:to_sphinx_clause => "attr b")
-        ],
-        :link!              => true,
-        :adapter            => :mysql,
-        :to_sql_query_pre   => "sql_query_pre",
-        :to_sql             => "SQL",
-        :to_sql_query_range => "sql_query_range",
-        :to_sql_query_info  => "sql_query_info",
-        :delta?             => false
-      )
-      
-      @database = {
-        :host     => "localhost",
-        :username => "username",
-        :password => "blank",
-        :database => "db"
-      }
-    end
-    
-    it "should call link!" do
-      @index.to_config(0, @database, "utf-8")
-      
-      @index.should have_received(:link!)
-    end
-    
-    it "should raise an exception if the adapter isn't mysql or postgres" do
-      @index.stub_method(:adapter => :sqlite)
-      
-      lambda { @index.to_config(0, @database, "utf-8") }.should raise_error
-    end
-    
-    it "should set the core source name to {model}_{index}_core" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_core/
-      )
-    end
-    
-    it "should include the database config supplied" do
-      conf = @index.to_config(0, @database, "utf-8")
-      conf.should match(/type\s+= mysql/)
-      conf.should match(/sql_host\s+= localhost/)
-      conf.should match(/sql_user\s+= username/)
-      conf.should match(/sql_pass\s+= blank/)
-      conf.should match(/sql_db\s+= db/)
-    end
-    
-    it "should have a pre query 'SET NAMES utf8' if using mysql and utf8 charset" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query_pre\s+= SET NAMES utf8/
-      )
-      
-      @index.stub_method(:delta? => true)
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta.+sql_query_pre\s+= SET NAMES utf8/m
-      )
-      
-      @index.stub_method(:delta? => false)
-      @index.to_config(0, @database, "non-utf-8").should_not match(
-        /SET NAMES utf8/
-      )
-      
-      @index.stub_method(:adapter => :postgres)
-      @index.to_config(0, @database, "utf-8").should_not match(
-        /SET NAMES utf8/
-      )
-    end
-    
-    it "should use the pre query from the index" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query_pre\s+= sql_query_pre/
-      )
-    end
-    
-    it "should not set group_concat_max_len if not specified" do
-      @index.to_config(0, @database, "utf-8").should_not match(
-        /group_concat_max_len/
-      )
-    end
-
-    it "should set group_concat_max_len if specified" do
-      @index.options.merge! :group_concat_max_len => 2056
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query_pre\s+= SET SESSION group_concat_max_len = 2056/
-      )
-      
-      @index.stub_method(:delta? => true)
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta.+sql_query_pre\s+= SET SESSION group_concat_max_len = 2056/m
-      )
-    end
-    
-    it "should use the main query from the index" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query\s+= SQL/
-      )
-    end
-    
-    it "should use the range query from the index" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query_range\s+= sql_query_range/
-      )
-    end
-    
-    it "should use the info query from the index" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /sql_query_info\s+= sql_query_info/
-      )
-    end
-    
-    it "should include the attribute sources" do
-      @index.to_config(0, @database, "utf-8").should match(
-        /attr a\n\s+attr b/
-      )
-    end
-    
-    it "should add a delta index with name {model}_{index}_delta if requested" do
-      @index.stub_method(:delta? => true)
-      
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta/
-      )
-    end
-    
-    it "should not add a delta index unless requested" do
-      @index.to_config(0, @database, "utf-8").should_not match(
-        /source person_0_delta/
-      )
-    end
-    
-    it "should have the delta index inherit from the core index" do
-      @index.stub_method(:delta? => true)
-      
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta : person_0_core/
-      )
-    end
-    
-    it "should redefine the main query for the delta index" do
-      @index.stub_method(:delta? => true)
-      
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta.+sql_query\s+= SQL/m
-      )
-    end
-    
-    it "should redefine the range query for the delta index" do
-      @index.stub_method(:delta? => true)
-      
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta.+sql_query_range\s+= sql_query_range/m
-      )
-    end
-    
-    it "should redefine the pre query for the delta index" do
-      @index.stub_method(:delta? => true)
-      
-      @index.to_config(0, @database, "utf-8").should match(
-        /source person_0_delta.+sql_query_pre\s+=\s*\n/m
-      )
-    end
-  end
-  
-  describe "to_sql_query_range method" do
-    before :each do
-      @index = ThinkingSphinx::Index.new(Person)
-    end
-    
-    it "should add COALESCE around MIN and MAX calls if using PostgreSQL" do
-      @index.stub_method(:adapter => :postgres)
-      
-      @index.to_sql_query_range.should match(/COALESCE\(MIN.+COALESCE\(MAX/)
-    end
-    
-    it "shouldn't add COALESCE if using MySQL" do
-      @index.to_sql_query_range.should_not match(/COALESCE/)
+      @index.groupings << "custom_sql"
+      @index.to_riddle_for_core(0, 0).sql_query.should match(/GROUP BY.+custom_sql/)
     end
   end
   
@@ -228,31 +52,93 @@ describe ThinkingSphinx::Index do
     end
   end
   
-  describe "empty? method" do
-    before :each do
-      @index = ThinkingSphinx::Index.new(Person)
-      config = ThinkingSphinx::Configuration.new
+  describe "multi-value attribute as ranged-query with has-many association" do
+    before :each do 
+      @index = ThinkingSphinx::Index.new(Person) do
+        has tags(:id), :as => :tag_ids, :source => :ranged_query
+      end
+      @index.link!
       
-      `mkdir -p #{config.searchd_file_path}`
-      @file_path = "#{config.searchd_file_path}/#{@index.name}_core.spa"
+      @sql = @index.to_riddle_for_core(0, 0).sql_query
     end
     
-    after :each do
-      `rm #{@file_path}` if File.exists?(@file_path)
+    it "should not include attribute in select-clause sql_query" do
+      @sql.should_not match(/tag_ids/)
+      @sql.should_not match(/GROUP_CONCAT\(`tags`.`id`/)
     end
     
-    it "should return true if the index files are empty" do
-      `touch #{@file_path}`
-      @index.should be_empty
+    it "should not join with association table" do
+      @sql.should_not match(/LEFT OUTER JOIN `tags`/)
     end
     
-    it "should return true if the index files don't exist" do
-      @index.should be_empty
+    it "should include sql_attr_multi as ranged-query" do
+      attribute = @index.send(:attributes).first
+      attribute.send(:type_to_config).to_s.should == "sql_attr_multi"
+      
+      declaration, query, range_query = attribute.send(:config_value).split('; ')
+      declaration.should == "uint tag_ids from ranged-query"
+      query.should       == "SELECT `tags`.`person_id` #{ThinkingSphinx.unique_id_expression} AS `id`, `tags`.`id` AS `tag_ids` FROM `tags` WHERE `tags`.`person_id` >= $start AND `tags`.`person_id` <= $end"
+      range_query.should == "SELECT MIN(`tags`.`person_id`), MAX(`tags`.`person_id`) FROM `tags`"
+    end
+  end
+  
+  describe "multi-value attribute as ranged-query with has-many-through association" do
+    before :each do
+      @index = ThinkingSphinx::Index.new(Person) do
+        has football_teams(:id), :as => :football_teams_ids, :source => :ranged_query
+      end
+      @index.link!
+      
+      @sql = @index.to_riddle_for_core(0, 0).sql_query
     end
     
-    it "should return false if the index files aren't empty" do
-      `echo 'a' > #{@file_path}`
-      @index.should_not be_empty
+    it "should not include attribute in select-clause sql_query" do
+      @sql.should_not match(/football_teams_ids/)
+      @sql.should_not match(/GROUP_CONCAT\(`tags`.`football_team_id`/)
+    end
+    
+    it "should not join with association table" do
+      @sql.should_not match(/LEFT OUTER JOIN `tags`/)
+    end
+    
+    it "should include sql_attr_multi as ranged-query" do
+      attribute = @index.send(:attributes).first
+      attribute.send(:type_to_config).to_s.should == "sql_attr_multi"
+      
+      declaration, query, range_query = attribute.send(:config_value).split('; ')
+      declaration.should == "uint football_teams_ids from ranged-query"
+      query.should       == "SELECT `tags`.`person_id` #{ThinkingSphinx.unique_id_expression} AS `id`, `tags`.`football_team_id` AS `football_teams_ids` FROM `tags` WHERE `tags`.`person_id` >= $start AND `tags`.`person_id` <= $end"
+      range_query.should == "SELECT MIN(`tags`.`person_id`), MAX(`tags`.`person_id`) FROM `tags`"
+    end
+  end
+  
+  describe "multi-value attribute as ranged-query with has-many-through association and foreign_key" do
+    before :each do
+      @index = ThinkingSphinx::Index.new(Person) do
+        has friends(:id), :as => :friend_ids, :source => :ranged_query
+      end
+      @index.link!
+      
+      @sql = @index.to_riddle_for_core(0, 0).sql_query
+    end
+    
+    it "should not include attribute in select-clause sql_query" do
+      @sql.should_not match(/friend_ids/)
+      @sql.should_not match(/GROUP_CONCAT\(`friendships`.`friend_id`/)
+    end
+    
+    it "should not join with association table" do
+      @sql.should_not match(/LEFT OUTER JOIN `friendships`/)
+    end
+    
+    it "should include sql_attr_multi as ranged-query" do
+      attribute = @index.send(:attributes).first
+      attribute.send(:type_to_config).to_s.should == "sql_attr_multi"
+      
+      declaration, query, range_query = attribute.send(:config_value).split('; ')
+      declaration.should == "uint friend_ids from ranged-query"
+      query.should       == "SELECT `friendships`.`person_id` #{ThinkingSphinx.unique_id_expression} AS `id`, `friendships`.`friend_id` AS `friend_ids` FROM `friendships` WHERE `friendships`.`person_id` >= $start AND `friendships`.`person_id` <= $end"
+      range_query.should == "SELECT MIN(`friendships`.`person_id`), MAX(`friendships`.`person_id`) FROM `friendships`"
     end
   end
 end

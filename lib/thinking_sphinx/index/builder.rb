@@ -18,9 +18,14 @@ module ThinkingSphinx
         # rails documentation. It's not needed though, so it gets undef'd.
         # Hopefully the list of methods that get in the way doesn't get too
         # long.
-        undef_method :parent
+        HiddenMethods = [:parent, :name, :id, :type].each { |method|
+          define_method(method) {
+            caller.grep(/irb.completion/).empty? ? method_missing(method) : super
+          }
+        }
         
-        attr_accessor :fields, :attributes, :properties, :conditions
+        attr_accessor :fields, :attributes, :properties, :conditions,
+          :groupings
         
         # Set up all the collections. Consider this the equivalent of an
         # instance's initialize method.
@@ -30,6 +35,7 @@ module ThinkingSphinx
           @attributes = []
           @properties = {}
           @conditions = []
+          @groupings  = []
         end
         
         # This is how you add fields - the strings Sphinx looks at - to your
@@ -81,16 +87,15 @@ module ThinkingSphinx
         def indexes(*args)
           options = args.extract_options!
           args.each do |columns|
-            columns = FauxColumn.new(columns) if columns.is_a?(Symbol)
-            fields << Field.new(columns, options)
+            fields << Field.new(FauxColumn.coerce(columns), options)
             
-            if fields.last.sortable
+            if fields.last.sortable || fields.last.faceted
               attributes << Attribute.new(
                 fields.last.columns.collect { |col| col.clone },
                 options.merge(
                   :type => :string,
                   :as => fields.last.unique_name.to_s.concat("_sort").to_sym
-                )
+                ).except(:facet)
               )
             end
           end
@@ -129,7 +134,7 @@ module ThinkingSphinx
         # when you would like to index a calculated value. Don't forget to set
         # the type of the attribute though:
         #
-        #   indexes "age < 18", :as => :minor, :type => :boolean
+        #   has "age < 18", :as => :minor, :type => :boolean
         # 
         # If you're creating attributes for latitude and longitude, don't
         # forget that Sphinx expects these values to be in radians.
@@ -137,26 +142,19 @@ module ThinkingSphinx
         def has(*args)
           options = args.extract_options!
           args.each do |columns|
-            columns = case columns
-            when Symbol, String
-              FauxColumn.new(columns)
-            when Array
-              columns.collect { |col|
-                case col
-                when Symbol, String
-                  FauxColumn.new(col)
-                else
-                  col
-                end
-              }
-            else
-              columns
-            end
-            
-            attributes << Attribute.new(columns, options)
+            attributes << Attribute.new(FauxColumn.coerce(columns), options)
           end
         end
         alias_method :attribute, :has
+        
+        def facet(*args)
+          options = args.extract_options!
+          options[:facet] = true
+          
+          args.each do |columns|
+            attributes << Attribute.new(FauxColumn.coerce(columns), options)
+          end
+        end
         
         # Use this method to add some manual SQL conditions for your index
         # request. You can pass in as many strings as you like, they'll get
@@ -169,6 +167,16 @@ module ThinkingSphinx
           @conditions += args
         end
         
+        # Use this method to add some manual SQL strings to the GROUP BY
+        # clause. You can pass in as many strings as you'd like, they'll get
+        # joined together with commas later on.
+        # 
+        #   group_by "lat", "lng"
+        # 
+        def group_by(*args)
+          @groupings += args
+        end
+        
         # This is what to use to set properties on the index. Chief amongst
         # those is the delta property - to allow automatic updates to your
         # indexes as new models are added and edited - but also you can
@@ -177,6 +185,9 @@ module ThinkingSphinx
         # 
         #   set_property :delta => true
         #   set_property :field_weights => {"name" => 100}
+        #   set_property :order => "name ASC"
+        #   set_property :include => :picture
+        #   set_property :select => 'name'
         # 
         # Also, the following two properties are particularly relevant for
         # geo-location searching - latitude_attr and longitude_attr. If your
@@ -185,11 +196,21 @@ module ThinkingSphinx
         # when defining the index, so you don't need to specify them for every
         # geo-related search.
         #
-        #   set_property :latitude_attr => "lt", :longitude => "lg"
+        #   set_property :latitude_attr => "lt", :longitude_attr => "lg"
         # 
         # Please don't forget to add a boolean field named 'delta' to your
         # model's database table if enabling the delta index for it.
+        # Valid options for the delta property are:
         # 
+        # true
+        # false
+        # :default
+        # :delayed
+        # :datetime
+        # 
+        # You can also extend ThinkingSphinx::Deltas::DefaultDelta to implement 
+        # your own handling for delta indexing.
+        
         def set_property(*args)
           options = args.extract_options!
           if options.empty?
@@ -205,6 +226,16 @@ module ThinkingSphinx
         # 
         def method_missing(method, *args)
           FauxColumn.new(method, *args)
+        end
+        
+        # A method to allow adding fields from associations which have names
+        # that clash with method names in the Builder class (ie: properties,
+        # fields, attributes).
+        # 
+        # Example: indexes assoc(:properties).column
+        # 
+        def assoc(assoc, *args)
+          FauxColumn.new(assoc, *args)
         end
       end
     end
