@@ -355,7 +355,7 @@ block:
           @associations[col].collect { |assoc| assoc.reflection.klass }
         klasses.all? { |klass|
           column = klass.columns.detect { |column| column.name == col.__name.to_s }
-          !column.nil? && column_types.include?(column.type)
+          column.nil? || column_types.include?(column.type)
         }
       }
     end
