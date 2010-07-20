@@ -43,12 +43,17 @@ module ThinkingSphinx
       end
     end
     
+    def populate_method
+      options[:classes].nil? ? :search : :search_for_ids
+    end
+
     def populate
       facet_names.each do |name|
         search_options = facet_search_options.merge(:group_by => name)
-        add_from_results name, ThinkingSphinx.search(
-          *(args + [search_options])
+        results = ThinkingSphinx.__send__(
+          populate_method, *(args + [search_options])
         )
+        add_from_results name, results
       end
     end
     
@@ -62,6 +67,10 @@ module ThinkingSphinx
         :max_matches    => max,
         :page           => 1
       )
+    end
+
+    def facet_class
+      (options[:classes] || []).first
     end
     
     def facet_classes
@@ -130,7 +139,11 @@ module ThinkingSphinx
     end
     
     def facet_from_object(object, name)
-      object.sphinx_facets.detect { |facet| facet.attribute_name == name }
+      if object.is_a? Fixnum
+        facet_class.sphinx_facets.detect { |facet| facet.attribute_name == name }
+      else
+        object.sphinx_facets.detect { |facet| facet.attribute_name == name }
+      end
     end
   end
 end
