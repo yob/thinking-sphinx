@@ -141,7 +141,8 @@ module ThinkingSphinx
     # extra configuration. 
     # 
     def config_value(offset = nil, delta = false)
-      if type == :multi
+      case type
+      when :multi, :csv_integers
         multi_config = include_as_association? ? "field" :
           source_value(offset, delta).gsub(/\s+/m, " ").strip
         "uint #{unique_name} from #{multi_config}"
