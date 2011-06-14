@@ -44,7 +44,7 @@ module ThinkingSphinx
       case property.type
       when :string
         true
-      when :integer, :boolean, :datetime, :float
+      when :integer, :boolean, :datetime, :float, :csv_integers
         false
       when :multi
         !property.all_ints?

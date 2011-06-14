@@ -103,6 +103,8 @@ module ThinkingSphinx
           column = adapter.cast_to_datetime(column)   if is_many_datetimes?
           column = adapter.convert_nulls(column, '0') if is_many_ints?
           column
+        when :csv_integers
+          adapter.convert_nulls(column, '0')
         else
           column
         end
@@ -119,6 +121,7 @@ module ThinkingSphinx
     def type_to_config
       {
         :multi    => :sql_attr_multi,
+        :csv_integers => :sql_attr_multi,
         :datetime => :sql_attr_timestamp,
         :string   => :sql_attr_str2ordinal,
         :float    => :sql_attr_float,
